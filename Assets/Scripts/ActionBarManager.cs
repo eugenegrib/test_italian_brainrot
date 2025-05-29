@@ -5,7 +5,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI; // Добавлено для работы с Image
+using UnityEngine.UI; 
+using System.Linq; 
 
 [RequireComponent(typeof(AudioSource))]
 public class ActionBarManager : MonoBehaviour
@@ -18,7 +19,8 @@ public class ActionBarManager : MonoBehaviour
     
     [Header("Настройки")]
     [SerializeField] private float _figureMoveSpeed = 15f; 
-    [SerializeField] private float _figureScaleInBar = 0.7f; 
+    [SerializeField] [Tooltip("Конечный масштаб фишки в баре (например, 0.7f).")]
+    private float _figureScaleInBar = 0.7f; 
     [SerializeField] private AnimationCurve _moveCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); // Как плавно движется фишка
 
     [Header("Настройки анимации уничтожения совпавших фишек")]
@@ -26,14 +28,14 @@ public class ActionBarManager : MonoBehaviour
     [SerializeField] private float _matchRemovalDelayBetweenFigures = 0.1f; 
     [SerializeField] private float _matchRemovalDelayBeforeShift = 0.1f; 
     [SerializeField] private float _matchFoundHoldDuration = 1.0f; 
-    [SerializeField] private AnimationCurve _destroyAnimationCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); // Кривая для анимации уничтожения (масштаб)
+    [SerializeField] private AnimationCurve _destroyAnimationCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); 
 
     [Header("Настройки вспышки комбо")] 
-    [SerializeField] private Color _comboFlashColor = Color.white; // Цвет, до которого будет вспышка (например, белый)
-    [SerializeField] private float _comboFlashDuration = 0.2f; // Длительность вспышки
-    [SerializeField] private AnimationCurve _comboFlashCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); // Кривая для анимации вспышки
+    [SerializeField] private Color _comboFlashColor = Color.white; 
+    [SerializeField] private float _comboFlashDuration = 0.2f; 
+    [SerializeField] private AnimationCurve _comboFlashCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); 
     [SerializeField] [Tooltip("Насколько ярче будет вспышка. 1.0 - обычная яркость, 2.0 - в два раза ярче.")]
-    private float _comboBrightnessMultiplier = 2.0f; // <-- НОВОЕ: Множитель яркости для вспышки
+    private float _comboBrightnessMultiplier = 2.0f; 
 
     [Header("Настройки очистки бара (для обновления уровня)")]
     [SerializeField] private float _clearFigureAnimationDuration = 0.2f; 
@@ -48,6 +50,8 @@ public class ActionBarManager : MonoBehaviour
     private const int MAX_SLOTS = 7; 
 
     private Color _originalBarColor; 
+    private Coroutine _currentFlashCoroutine; 
+    private bool _matchSoundPlayedForCurrentComboChain = false; 
 
     void Awake()
     {
@@ -68,10 +72,11 @@ public class ActionBarManager : MonoBehaviour
             Debug.LogError($"[Бар] Нужно назначить {MAX_SLOTS} слотов в инспекторе!");
         }
 
-        // Задаем стандартную кривую уменьшения по умолчанию (от 1 до 0).
+        // --- ИНИЦИАЛИЗАЦИЯ КРИВЫХ (если их нет в вашем оригинале, вы можете удалить эти блоки) ---
         if (_destroyAnimationCurve.keys.Length == 0) 
         {
             _destroyAnimationCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f); 
+            Debug.Log("[Бар] _destroyAnimationCurve инициализирован по умолчанию.");
         }
 
         if (_actionBarBackgroundImage != null)
@@ -83,18 +88,17 @@ public class ActionBarManager : MonoBehaviour
             Debug.LogWarning("[Бар] Не назначено фоновое изображение бара (_actionBarBackgroundImage). Вспышка комбо не будет работать.");
         }
 
-        // Задаем стандартную кривую вспышки по умолчанию (от 0 до 1 и обратно к 0).
-        // Это контролирует, насколько сильно цвет вспышки будет добавлен к оригинальному.
-        if (_comboFlashCurve.keys.Length == 0)
+        if (_comboFlashCurve.keys.Length == 0) 
         {
             _comboFlashCurve = new AnimationCurve(
-                new Keyframe(0f, 0f, 0f, 0f),    // Начало: вспышки нет
-                new Keyframe(0.5f, 1f, 0f, 0f),  // Пик: максимальная вспышка
-                new Keyframe(1f, 0f, 0f, 0f)     // Конец: вспышка исчезает
+                new Keyframe(0f, 0f, 0f, 0f),    
+                new Keyframe(0.5f, 1f, 0f, 0f),  
+                new Keyframe(1f, 0f, 0f, 0f)     
             );
+            Debug.Log("[Бар] _comboFlashCurve инициализирован по умолчанию.");
         }
+        // --- КОНЕЦ ИНИЦИАЛИЗАЦИИ КРИВЫХ ---
     }
-
     /// <summary>
     /// Добавляет фишку в бар.
     /// </summary>
@@ -119,6 +123,8 @@ public class ActionBarManager : MonoBehaviour
         _figuresInBar.Add(figure); 
         figure.SetInActionBarMode(); 
 
+        _matchSoundPlayedForCurrentComboChain = false; // Сброс флага для звука
+        
         int targetSlotIndex = MAX_SLOTS - 1 - (_figuresInBar.Count - 1); 
         
         StartCoroutine(MoveFigureToSlotCoroutine(figure, targetSlotIndex)); 
@@ -129,6 +135,8 @@ public class ActionBarManager : MonoBehaviour
     /// </summary>
     private IEnumerator MoveFigureToSlotCoroutine(Figure figure, int slotIndex)
     {
+        if (figure == null) yield break; 
+
         if (slotIndex < 0 || slotIndex >= MAX_SLOTS)
         {
             Debug.LogError($"[Бар] Неправильный индекс слота: {slotIndex}");
@@ -170,7 +178,7 @@ public class ActionBarManager : MonoBehaviour
         
         figure.transform.position = targetPositionWorld;
         figure.transform.rotation = targetRotation; 
-        figure.transform.localScale = targetScale;
+        figure.transform.localScale = targetScale; 
 
         figure.transform.SetParent(targetSlotRect, worldPositionStays: true); 
         
@@ -182,6 +190,12 @@ public class ActionBarManager : MonoBehaviour
         {
             figure.transform.localPosition = Vector3.zero; 
         }
+        
+        // Если у вас есть проблемы с тем, что масштаб "зависает" в некорректном значении после SetParent,
+        // здесь можно было бы добавить:
+        // yield return new WaitForEndOfFrame(); 
+        // figure.transform.localScale = targetScale; 
+        // Но если это нарушает плавность, которую вы хотите, то это нужно исследовать отдельно.
 
         yield return StartCoroutine(CheckForMatchesCoroutine());
     }
@@ -191,7 +205,9 @@ public class ActionBarManager : MonoBehaviour
     /// </summary>
     private IEnumerator CheckForMatchesCoroutine()
     {
-        if (GameManager.Instance != null && GameManager.Instance.CurrentGameState != GameManager.GameState.Playing)
+        // Разрешить проверку при реролле (если это нужно)
+        if (GameManager.Instance != null && GameManager.Instance.CurrentGameState != GameManager.GameState.Playing &&
+            GameManager.Instance.CurrentGameState != GameManager.GameState.Rerolling) 
         {
             yield break;
         }
@@ -202,6 +218,7 @@ public class ActionBarManager : MonoBehaviour
             matchFoundInLoop = false;
             if (_figuresInBar.Count < 3) break; 
 
+            // ВОЗВРАЩАЕМСЯ К ВАШЕЙ ОРИГИНАЛЬНОЙ ЛОГИКЕ ПОИСКА СОВПАДЕНИЙ ПОДРЯД
             List<Figure> currentBarState = new List<Figure>(_figuresInBar); 
             for (int i = 0; i <= currentBarState.Count - 3; i++)
             {
@@ -217,16 +234,20 @@ public class ActionBarManager : MonoBehaviour
                     
                     if (_actionBarBackgroundImage != null)
                     {
-                        _actionBarBackgroundImage.StopAllCoroutines(); 
-                        StartCoroutine(AnimateComboFlash(_actionBarBackgroundImage, _originalBarColor, _comboFlashColor, _comboFlashDuration, _comboFlashCurve, _comboBrightnessMultiplier));
+                        if (_currentFlashCoroutine != null) StopCoroutine(_currentFlashCoroutine);
+                        _currentFlashCoroutine = StartCoroutine(AnimateComboFlash(_actionBarBackgroundImage, _originalBarColor, _comboFlashColor, _comboFlashDuration, _comboFlashCurve, _comboBrightnessMultiplier));
                     }
 
-                    yield return StartCoroutine(AnimateAndRemoveMatchedFigures(i, fig1, fig2, fig3));
-                    break; 
+                    // Передаем оригинальный список из трех фишек для удаления
+                    // Важно передавать их в том порядке, в котором они были найдены,
+                    // чтобы AnimateAndRemoveMatchedFigures мог правильно их обработать.
+                    yield return StartCoroutine(AnimateAndRemoveMatchedFigures(new List<Figure> { fig1, fig2, fig3 }));
+                    break; // Выходим из for, чтобы начать проверку заново после удаления
                 }
             }
         } while (matchFoundInLoop); 
 
+        // Проверка на проигрыш после всех возможных совпадений.
         if (_figuresInBar.Count >= MAX_SLOTS)
         {
             Debug.Log("[Бар] Бар полон и нет совпадений. Проигрыш.");
@@ -237,33 +258,28 @@ public class ActionBarManager : MonoBehaviour
     /// <summary>
     /// Корутина для анимации и удаления совпавших фишек.
     /// </summary>
-    private IEnumerator AnimateAndRemoveMatchedFigures(int startIndex, Figure fig1, Figure fig2, Figure fig3)
-    {
-        yield return StartCoroutine(AnimateMatchedFiguresRemoval(fig1, fig2, fig3));
-
-        _figuresInBar.Remove(fig3);
-        _figuresInBar.Remove(fig2);
-        _figuresInBar.Remove(fig1);
-
-        yield return StartCoroutine(ShiftFiguresCoroutine(startIndex));
-    }
-
-    /// <summary>
-    /// Анимирует исчезновение совпавших фишек.
-    /// </summary>
-    private IEnumerator AnimateMatchedFiguresRemoval(Figure fig1, Figure fig2, Figure fig3)
+    private IEnumerator AnimateAndRemoveMatchedFigures(List<Figure> matchedFigures) // Принимает список
     {
         yield return new WaitForSeconds(_matchFoundHoldDuration); 
-
-        List<Figure> figures = new List<Figure> { fig1, fig2, fig3 };
-        figures.Sort((fA, fB) => _figuresInBar.IndexOf(fB).CompareTo(_figuresInBar.IndexOf(fA))); 
-
-        if (_audioSource != null && _matchSound != null)
+        
+        // Проигрываем звук, только если он еще не проигрывался в этой цепочке
+        if (!_matchSoundPlayedForCurrentComboChain && _audioSource != null && _matchSound != null)
         {
             _audioSource.PlayOneShot(_matchSound);
+            _matchSoundPlayedForCurrentComboChain = true; 
         }
+
         if (_matchParticlesSystem != null)
         {
+            Vector3 particlePosition = Vector3.zero;
+            foreach (Figure fig in matchedFigures)
+            {
+                if (fig != null) particlePosition += fig.transform.position;
+            }
+            if (matchedFigures.Count > 0) particlePosition /= matchedFigures.Count;
+
+            _matchParticlesSystem.transform.position = particlePosition;
+
             _matchParticlesSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); 
             _matchParticlesSystem.Play(); 
         }
@@ -272,7 +288,15 @@ public class ActionBarManager : MonoBehaviour
             Debug.LogWarning("[Бар] Нет ParticleSystem для эффекта совпадения!");
         }
 
-        foreach (Figure fig in figures)
+        // --- ВОЗВРАЩАЕМСЯ К ВАШЕЙ ЛОГИКЕ: АНИМАЦИЯ УДАЛЕНИЯ СЛЕВА НАПРАВО ---
+        // Если matchedFigures пришел в порядке (правая, средняя, левая) из-за того, как 
+        // fig1, fig2, fig3 были выбраны из currentBarState (который является копией _figuresInBar,
+        // а _figuresInBar заполняется СПРАВА НАЛЕВО),
+        // то для анимации СЛЕВА НАПРАВО нам нужно развернуть этот список.
+        List<Figure> figuresToAnimate = new List<Figure>(matchedFigures); // Создаем копию для разворота
+        figuresToAnimate.Reverse(); // <--- ВАЖНО: РАЗВОРАЧИВАЕМ СПИСОК ДЛЯ АНИМАЦИИ СЛЕВА НАПРАВО
+
+        foreach (Figure fig in figuresToAnimate) 
         {
             if (fig != null)
             {
@@ -280,14 +304,29 @@ public class ActionBarManager : MonoBehaviour
             }
             yield return new WaitForSeconds(_matchRemovalDelayBetweenFigures); 
         }
+
+        // Удаляем из _figuresInBar из оригинального списка
+        // Важно делать это после анимации
+        foreach (Figure fig in matchedFigures) 
+        {
+            if (_figuresInBar.Contains(fig)) 
+            {
+                _figuresInBar.Remove(fig);
+            }
+        }
+
+        // startIndex здесь не нужен, так как ShiftFiguresCoroutine теперь сдвигает все фишки в баре
+        yield return StartCoroutine(ShiftFiguresCoroutine()); 
     }
 
     /// <summary>
     /// Корутина для сдвига оставшихся фишек влево.
     /// </summary>
-    private IEnumerator ShiftFiguresCoroutine(int startIndex)
+    private IEnumerator ShiftFiguresCoroutine() // startIndex удален
     {
         yield return new WaitForSeconds(_matchRemovalDelayBeforeShift); 
+
+        Vector3 targetScale = Vector3.one * _figureScaleInBar; 
 
         for (int i = 0; i < _figuresInBar.Count; i++)
         {
@@ -331,6 +370,10 @@ public class ActionBarManager : MonoBehaviour
             {
                 figure.transform.localPosition = Vector3.zero;
             }
+            // Если у вас есть проблемы с тем, что масштаб "зависает" в некорректном значении после SetParent,
+            // здесь можно было бы добавить:
+            // yield return new WaitForEndOfFrame(); 
+            // figure.transform.localScale = targetScale;
         }
     }
 
@@ -339,16 +382,18 @@ public class ActionBarManager : MonoBehaviour
     /// </summary>
     public IEnumerator ClearActionBarAnimated()
     {
-        for (int i = _figuresInBar.Count - 1; i >= 0; i--)
+        List<Figure> figuresToClearCopy = new List<Figure>(_figuresInBar);
+        
+        for (int i = figuresToClearCopy.Count - 1; i >= 0; i--)
         {
-            Figure figureToClear = _figuresInBar[i];
+            Figure figureToClear = figuresToClearCopy[i];
             if (figureToClear != null)
             {
                 yield return StartCoroutine(AnimateFigureScaleDownAndReturn(figureToClear, _clearFigureAnimationDuration)); 
             }
-            _figuresInBar.RemoveAt(i); 
             yield return new WaitForSeconds(_clearFigureDelayBetween); 
         }
+        _figuresInBar.Clear(); 
         Debug.Log("[Бар] Панель очищена.");
     }
 
@@ -359,6 +404,8 @@ public class ActionBarManager : MonoBehaviour
     /// <param name="duration">Длительность анимации.</param>
     private IEnumerator AnimateFigureScaleDownAndReturn(Figure figure, float duration)
     {
+        if (figure == null) yield break;
+
         Vector3 startScale = figure.transform.localScale;
         float startTime = Time.time;
 
@@ -383,28 +430,26 @@ public class ActionBarManager : MonoBehaviour
     /// <summary>
     /// Корутина для анимации вспышки фона бара.
     /// </summary>
- 
     private IEnumerator AnimateComboFlash(Image targetImage, Color startColor, Color flashColor, float duration, AnimationCurve curve, float brightnessMultiplier)
     {
         if (targetImage == null) yield break;
 
         float timer = 0f;
-        targetImage.StopAllCoroutines(); 
-
+        if (_currentFlashCoroutine != null) StopCoroutine(_currentFlashCoroutine); // Останавливаем предыдущую вспышку, если она еще идет
+        
         Color peakFlashColor = flashColor * brightnessMultiplier;
 
         while (timer < duration)
         {
             float t = timer / duration;
-            float curveValue = curve.Evaluate(t); // Кривая от 0 до 1 и обратно к 0
+            float curveValue = curve.Evaluate(t); 
 
-            // Интерполируем цвет от начального цвета до пикового цвета вспышки, затем обратно.
-          
             targetImage.color = Color.Lerp(startColor, peakFlashColor, curveValue);
             timer += Time.deltaTime;
             yield return null;
         }
         targetImage.color = startColor;
+        _currentFlashCoroutine = null; // Сброс ссылки на корутину вспышки
     }
 
     /// <summary>
@@ -412,7 +457,9 @@ public class ActionBarManager : MonoBehaviour
     /// </summary>
     public void ResetBar()
     {
-        foreach(Figure figure in _figuresInBar)
+        // Используем копию, чтобы избежать проблем при изменении коллекции во время итерации
+        List<Figure> figuresInBarCopy = new List<Figure>(_figuresInBar);
+        foreach(Figure figure in figuresInBarCopy)
         {
             if(figure != null) ObjectPoolManager.Instance?.ReturnFigure(figure);
         }

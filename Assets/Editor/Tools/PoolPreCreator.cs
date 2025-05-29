@@ -13,8 +13,10 @@ public class PoolPreCreator : EditorWindow
     private FigureVisualsConfig _visualsConfig; // Конфиг с визуалами фишек
     private ObjectPoolManager _poolManager; // Ссылка на менеджер пула в сцене
     private string _poolParentObjectName = "FigurePool"; // Название родительского объекта для фишек в пуле
-    [Tooltip("Сколько экземпляров каждого уникального типа фишки создать в пуле (например, 2 для 'в два раза больше').")]
-    private int _poolSizeMultiplier = 2; // Множитель размера пула для каждого типа
+    
+    // ИЗМЕНЕНО: Название поля и его смысл
+    [Tooltip("Сколько полных групп по 3 экземпляра каждого уникального типа фишки создать в пуле.")]
+    private int _numberOfTriplesPerType = 10; // Например, 10 троек каждого типа
 
     /// <summary>
     /// Добавляет пункт "Populate Unique Figure Pool" в меню "Tools/Game".
@@ -35,7 +37,10 @@ public class PoolPreCreator : EditorWindow
         _baseFigurePrefab = (GameObject)EditorGUILayout.ObjectField("Базовый префаб фишки", _baseFigurePrefab, typeof(GameObject), false);
         _visualsConfig = (FigureVisualsConfig)EditorGUILayout.ObjectField("Конфиг визуалов", _visualsConfig, typeof(FigureVisualsConfig), false);
         _poolManager = (ObjectPoolManager)EditorGUILayout.ObjectField("Менеджер пула (на сцене)", _poolManager, typeof(ObjectPoolManager), true);
-        _poolSizeMultiplier = EditorGUILayout.IntField("Множитель размера пула (на каждый тип)", _poolSizeMultiplier);
+        
+        // ИЗМЕНЕНО: Используем новое название поля
+        _numberOfTriplesPerType = EditorGUILayout.IntField("Кол-во троек каждого типа в пуле", _numberOfTriplesPerType);
+        _numberOfTriplesPerType = Mathf.Max(1, _numberOfTriplesPerType); // Минимум 1 тройка
 
         if (GUILayout.Button("Создать пул (очистить и создать)"))
         {
@@ -87,7 +92,7 @@ public class PoolPreCreator : EditorWindow
                 // Пропускаем, если для этой КОМБИНАЦИИ формы и цвета нет готового спрайта
                 if (_visualsConfig.GetCombinedShapeColorSprite(shape, shapeColor) == null)
                 {
-                    Debug.LogWarning($"Пропускаем комбинацию {shape}-{shapeColor}: нет комбинированного спрайта в конфиге.");
+                    Debug.LogWarning($"Пропускаем комбинацию {shape}-{shapeColor}: нет комбинированного спрайта в конфиге.", _visualsConfig);
                     continue;
                 }
 
@@ -96,11 +101,12 @@ public class PoolPreCreator : EditorWindow
                     // Пропускаем, если нет спрайта животного.
                     if (_visualsConfig.GetAnimalSprite(animal) == null)
                     {
-                        Debug.LogWarning($"Пропускаем животное {animal}: нет спрайта животного в конфиге.");
+                        Debug.LogWarning($"Пропускаем животное {animal}: нет спрайта животного в конфиге.", _visualsConfig);
                         continue;
                     }
 
-                    for (int i = 0; i < _poolSizeMultiplier; i++)
+                    // ИЗМЕНЕНО: Создаем N * 3 экземпляров каждого типа
+                    for (int i = 0; i < _numberOfTriplesPerType * 3; i++)
                     {
                         GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(_baseFigurePrefab, poolParent);
 
