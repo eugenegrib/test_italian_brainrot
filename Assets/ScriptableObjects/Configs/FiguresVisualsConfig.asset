@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7319dce31268a6942839b663c360b4b5, type: 3}
+  m_Name: FiguresVisualsConfig
+  m_EditorClassIdentifier: 
+  combinedShapeColorSprites:
+  - shapeType: 0
+    shapeColorType: 0
+    sprite: {fileID: 21300000, guid: 9fd369c2bdc76764b9add53680899c34, type: 3}
+  - shapeType: 1
+    shapeColorType: 0
+    sprite: {fileID: 21300000, guid: e43577e9febf4ef4186cbbd5694593b4, type: 3}
+  - shapeType: 2
+    shapeColorType: 0
+    sprite: {fileID: 21300000, guid: ae353b78c6bd4874d9edd1f7c67e57f8, type: 3}
+  - shapeType: 0
+    shapeColorType: 1
+    sprite: {fileID: 21300000, guid: 9679f33ea55acc2498611a89b82d35ce, type: 3}
+  - shapeType: 1
+    shapeColorType: 1
+    sprite: {fileID: 21300000, guid: 267452258d4ae57469244dfcc66455ad, type: 3}
+  - shapeType: 2
+    shapeColorType: 1
+    sprite: {fileID: 21300000, guid: 6ab66d3a38ed53445aea2cf8a5422e5e, type: 3}
+  - shapeType: 1
+    shapeColorType: 2
+    sprite: {fileID: 21300000, guid: fd5229d30d0b0e64c8b5624ce7da2c80, type: 3}
+  - shapeType: 0
+    shapeColorType: 2
+    sprite: {fileID: 21300000, guid: 979fc65d5b513fb438e862c2d0ea0a45, type: 3}
+  - shapeType: 2
+    shapeColorType: 2
+    sprite: {fileID: 21300000, guid: df98a110d3dc4fb42ac5cdadf1e7696c, type: 3}
+  animalSprites:
+  - type: 0
+    sprite: {fileID: 21300000, guid: 2f303447028349b4f80271c318db8eb3, type: 3}
+  - type: 1
+    sprite: {fileID: 21300000, guid: 0b34d76a1037e1c41a5e9772f86c66cb, type: 3}
+  - type: 2
+    sprite: {fileID: 21300000, guid: 4cdb303f928bdaa48ae46f6d42a93594, type: 3}
+  shapeColors:
+  - type: 0
+    color: {r: 0.06407974, g: 0.7817325, b: 0.9056604, a: 0}
+  - type: 1
+    color: {r: 0.21560161, g: 0.8962264, b: 0.38832694, a: 0}
+  - type: 2
+    color: {r: 0.8679245, g: 0.8400265, b: 0.18422928, a: 0}
